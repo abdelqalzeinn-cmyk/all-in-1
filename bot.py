@@ -1004,10 +1004,11 @@ async def start_flask():
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "bot": "starting"}).encode())
     
-    # Start the health check server
+    # Start the health check server on a different port to avoid conflicts
+    health_check_port = 8080  # Using 8080 as an alternative port
     def run_health_check():
-        server = HTTPServer(('0.0.0.0', port), HealthHandler)
-        print(f"Health check server started on port {port}")
+        server = HTTPServer(('0.0.0.0', health_check_port), HealthHandler)
+        print(f"Health check server started on port {health_check_port}")
         server.serve_forever()
     
     health_thread = threading.Thread(target=run_health_check, daemon=True)
@@ -1022,8 +1023,15 @@ async def main():
     flask_thread = Thread(target=lambda: asyncio.run(start_flask()), daemon=True)
     flask_thread.start()
     
-    # Give the server a moment to start
+    # Give the server a moment to start and check if it's running
     await asyncio.sleep(2)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f'http://localhost:{port}') as resp:
+                if resp.status == 200:
+                    print(f"✅ Flask server is running on port {port}")
+    except Exception as e:
+        print(f"⚠️  Could not connect to Flask server: {e}")
     
     try:
         # Run the bot
