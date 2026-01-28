@@ -989,20 +989,41 @@ async def on_disconnect():
     global browser, playwright
 from threading import Thread
 
+async def start_flask():
+    from server import app, socketio
+    port = int(os.getenv('PORT', 10000))
+    
+    # Create a simple HTTP server for health checks
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import threading
+    
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "bot": "starting"}).encode())
+    
+    # Start the health check server
+    def run_health_check():
+        server = HTTPServer(('0.0.0.0', port), HealthHandler)
+        print(f"Health check server started on port {port}")
+        server.serve_forever()
+    
+    health_thread = threading.Thread(target=run_health_check, daemon=True)
+    health_thread.start()
+    
+    # Start the Flask server
+    print(f"Starting Flask server on port {port}...")
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+
 async def main():
     # Start the Flask server in a separate thread
-    try:
-        from server import app, socketio
-        port = int(os.getenv('PORT', 10000))
-        
-        def run_flask():
-            socketio.run(app, host='0.0.0.0', port=port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
-            
-        flask_thread = Thread(target=run_flask, daemon=True)
-        flask_thread.start()
-        print(f"Flask server started on port {port}")
-    except Exception as e:
-        print(f"Warning: Could not start Flask server: {e}")
+    flask_thread = Thread(target=lambda: asyncio.run(start_flask()), daemon=True)
+    flask_thread.start()
+    
+    # Give the server a moment to start
+    await asyncio.sleep(2)
     
     try:
         # Run the bot
