@@ -10,15 +10,24 @@ import io
 import base64
 from typing import Optional, List
 from yt_dlp import YoutubeDL
-from dotenv import load_dotenv
+import sys
 from games import TicTacToe, Hangman, GuessTheNumber, Battleship
 from PIL import Image
 from io import BytesIO
 import json
 
-# Load environment variables
-load_dotenv()
+# Get environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
+if not TOKEN:
+    raise ValueError("No DISCORD_TOKEN found in environment variables. Please set it in Render's dashboard.")
+
+# Log environment info (for debugging)
+print("Starting bot with the following environment:")
+print(f"- Python: {sys.version}")
+print(f"- discord.py: {discord.__version__}")
+print(f"- Bot user: {os.getenv('BOT_USERNAME', 'Not set')}")
+print("-" * 40)
+
 COHERE_API_KEY = os.getenv('COHERE_API_KEY')
 
 # Bot setup
@@ -978,13 +987,51 @@ async def remove_role_cmd(ctx, role: discord.Role, member: discord.Member = None
 async def on_disconnect():
     """Clean up resources when bot disconnects"""
     global browser, playwright
-    if browser:
-        await browser.close()
-    if playwright:
-        await playwright.stop()
+from threading import Thread
+
+async def main():
+    # Start the Flask server in a separate thread
+    try:
+        from server import app, socketio
+        port = int(os.getenv('PORT', 10000))
+        
+        def run_flask():
+            socketio.run(app, host='0.0.0.0', port=port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+            
+        flask_thread = Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        print(f"Flask server started on port {port}")
+    except Exception as e:
+        print(f"Warning: Could not start Flask server: {e}")
+    
+    try:
+        # Run the bot
+        print("Starting Discord bot...")
+        await bot.start(TOKEN)
+    except KeyboardInterrupt:
+        print("Bot stopped by user")
+    except Exception as e:
+        print(f"Bot error: {e}")
+    finally:
+        # Clean up resources
+        if 'browser' in globals() and browser:
+            await browser.close()
+        if 'playwright' in globals() and playwright:
+            await playwright.stop()
+        print("Bot has been shut down")
 
 if __name__ == "__main__":
     if not TOKEN:
         print("Error: No Discord token found in .env file!")
-    else:
-        bot.run(TOKEN)
+        sys.exit(1)
+        
+    import asyncio
+    import sys
+    
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped by user")
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        sys.exit(1)
