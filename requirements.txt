@@ -1,24 +1,45 @@
-# Discord
+# Discord Bot
 discord.py>=2.4.1
-python-dotenv>=1.0.0
 
 # Web Scraping
 playwright>=1.40.0
+
+# Core Dependencies
+python-dotenv>=1.0.0
+cohere>=4.20
+ollama>=0.1.5
+
+# FastAPI Web Server
+fastapi>=0.68.0
+uvicorn>=0.15.0
+python-multipart>=0.0.5
+gunicorn>=20.1.0
+uvloop>=0.17.0
+httptools>=0.5.0
+
+# WebSocket Support (if needed)
+websockets>=10.4
+
+# ASGI Server
+uvicorn[standard]>=0.15.0
 
 # Utilities
 aiohttp>=3.8.4
 yt-dlp>=2023.3.4
 Pillow>=9.5.0
 requests>=2.28.2
+Jinja2>=3.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.5
 
-# Web Server
+# Legacy Web Server (if needed by bot)
 Flask>=2.3.3
 Flask-SocketIO>=5.3.5
 Flask-Cors>=4.0.0
 python-socketio>=5.8.0
 python-engineio>=4.5.1
 Werkzeug>=2.3.7
-cohere>=4.20
 
 # Async
 asyncio>=3.4.3

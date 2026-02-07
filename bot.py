@@ -15,6 +15,15 @@ from games import TicTacToe, Hangman, GuessTheNumber, Battleship
 from PIL import Image
 from io import BytesIO
 import json
+import ollama
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Loaded .env file successfully")
+except ImportError:
+    print("Warning: python-dotenv not installed, using system environment variables only")
 
 # Get environment variables
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -27,8 +36,6 @@ print(f"- Python: {sys.version}")
 print(f"- discord.py: {discord.__version__}")
 print(f"- Bot user: {os.getenv('BOT_USERNAME', 'Not set')}")
 print("-" * 40)
-
-COHERE_API_KEY = os.getenv('COHERE_API_KEY')
 
 # Bot setup
 intents = discord.Intents.default()
@@ -77,27 +84,36 @@ async def send_long_message(interaction: discord.Interaction, text: str, prefix:
     for chunk in chunks[1:]:
         await interaction.followup.send(chunk)
 
-# Cohere AI Integration
-async def get_cohere_response(prompt: str) -> str:
-    url = "https://api.cohere.ai/v1/chat"
-    headers = {
-        "Authorization": f"Bearer {COHERE_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "message": prompt,
-        "model": "command-a-03-2025",
-        "temperature": 0.7,
-        "max_tokens": 1000
-    }
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=data) as response:
-            if response.status == 200:
-                result = await response.json()
-                return result.get('text', "Sorry, I couldn't generate a response.")
-            else:
-                return f"Error: {response.status} - {await response.text()}"
+# GLM AI Integration
+async def get_glm_response(prompt: str):
+    """Get response from GLM model via Ollama"""
+    try:
+        # Initialize Ollama client
+        client = ollama.Client(host='http://localhost:11434')
+        
+        # Generate response using GLM model
+        response = client.chat(
+            model='glm-4.6:cloud',  # Using the GLM model you have installed
+            messages=[
+                {
+                    'role': 'user',
+                    'content': f"Please respond in English: {prompt}"
+                }
+            ],
+            options={
+                'temperature': 0.7,
+                'max_tokens': 1000
+            }
+        )
+        
+        # Extract and return the response
+        if response and 'message' in response and 'content' in response['message']:
+            return response['message']['content']
+        else:
+            return "No response from GLM model."
+            
+    except Exception as e:
+        return f"Error connecting to GLM model: {str(e)}"
 
 # Music player functions
 def search_yt(query: str) -> str:
@@ -158,17 +174,43 @@ async def on_ready():
         print(f"Error during startup: {e}")
     await bot.change_presence(activity=discord.Game(name="Type /help"))
 
+@bot.event
+async def on_message(message):
+    # Don't respond to bot's own messages
+    if message.author == bot.user:
+        return
+    
+    # Don't respond to other bots
+    if message.author.bot:
+        return
+    
+    # Check if bot is mentioned
+    if bot.user.mentioned_in(message):
+        # Remove the bot mention from the message content
+        content = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+        
+        if content:
+            # Bot was mentioned with a question
+            async with message.channel.typing():
+                response = await get_glm_response(content)
+                await message.reply(f"**{message.author.mention}** asked: {content}\n\n**Answer:** {response}")
+        else:
+            # Bot was mentioned without content
+            await message.reply(f"Hello {message.author.mention}! How can I help you today?")
+    
+    # Process commands normally
+    await bot.process_commands(message)
+
 # AI Commands
 @bot.tree.command(name="ask", description="Ask the AI a question")
 @app_commands.describe(question="Your question for the AI")
 async def ask(interaction: discord.Interaction, question: str):
     """Ask the AI a question"""
-    await interaction.response.defer()
     try:
-        response = await get_cohere_response(question)
-        await send_long_message(interaction, response, "**AI Response:** ")
+        response = await get_glm_response(question)
+        await send_long_message(interaction, f"**Question:** {question}\n\n**Answer:** {response}")
     except Exception as e:
-        await interaction.followup.send(f"❌ An error occurred: {str(e)}")
+        await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
 
 # Music Commands
 @bot.tree.command(name="play", description="Play music from YouTube")
